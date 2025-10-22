@@ -332,6 +332,36 @@ def get_prediction_stats():
             'success': False,
             'error': str(e)
         }), 500
+        
+@app.route('/api/predictions-history', methods=['GET'])
+def get_predictions_history():
+    """Gibt alle Vorhersagen zurück"""
+    try:
+        import os
+        predictions_file = 'predictions_history.json'
+        
+        if os.path.exists(predictions_file):
+            with open(predictions_file, 'r') as f:
+                predictions = json.load(f)
+            
+            predictions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
+            return jsonify({
+                'success': True,
+                'count': len(predictions),
+                'predictions': predictions
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'count': 0,
+                'predictions': []
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
