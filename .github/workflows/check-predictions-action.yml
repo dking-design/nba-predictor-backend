@@ -1,0 +1,52 @@
+name: Check Predictions Daily
+
+on:
+  schedule:
+    # Jeden Tag um 10 Uhr morgens (nach den Spielen der Nacht)
+    - cron: '0 10 * * *'
+  
+  workflow_dispatch:
+
+jobs:
+  check-predictions:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install Dependencies
+        run: |
+          pip install nba-api
+      
+      - name: Check Yesterday's Predictions
+        run: |
+          python live_prediction_checker.py check
+      
+      - name: Show Stats
+        run: |
+          python live_prediction_checker.py stats
+      
+      - name: Commit Updated Stats
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          if ! git diff --quiet predictions_history.json prediction_stats.json; then
+            git add predictions_history.json prediction_stats.json
+            git commit -m "📊 Auto-update: Prediction stats $(date +'%Y-%m-%d')"
+            git push
+            echo "✅ Stats updated and pushed!"
+          else
+            echo "ℹ️ No changes to commit"
+          fi
+      
+      - name: Trigger Railway Deploy
+        if: success()
+        run: |
+          echo "✅ Stats updated! Railway will auto-deploy."
