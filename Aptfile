@@ -1,0 +1,4 @@
+build-essential
+gfortran
+libatlas-base-dev
+libopenblas-dev
