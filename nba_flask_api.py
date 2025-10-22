@@ -1,3 +1,5 @@
+from nba_games_loader import NBAGamesLoader
+games_loader = NBAGamesLoader()
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
@@ -257,7 +259,12 @@ def get_teams():
 
 @app.route('/api/today-games', methods=['GET'])
 def get_today_games():
-    """Lädt heutige und morgige NBA-Spiele (Mock-Daten für Test)"""
+    games = games_loader.get_games_with_fallback()
+    return jsonify({
+        'success': True,
+        'count': len(games),
+        'games': games
+    })
     
     mock_games = [
         {
