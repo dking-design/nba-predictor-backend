@@ -14,6 +14,9 @@ class PredictionTracker:
     """Trackt Vorhersagen und vergleicht mit Ergebnissen"""
     
     def __init__(self):
+	data_dir = '/data'
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
         self.predictions_file = 'predictions_history.json'
         self.stats_file = 'prediction_stats.json'
         self.load_data()
