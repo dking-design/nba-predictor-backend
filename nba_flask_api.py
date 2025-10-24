@@ -43,6 +43,7 @@ def home():
             '/api/predict': 'POST - Vorhersage machen',
             '/api/prediction-stats': 'GET - Prediction Accuracy Stats',
             '/api/predictions-history': 'GET - Alle Vorhersagen',
+            '/api/check-predictions': 'POST - Manueller Prediction Check',
             '/api/today-games': 'GET - Heutige NBA-Spiele',
             '/api/health': 'GET - Health Check'
         }
@@ -95,7 +96,7 @@ def search_players():
         'players': matches[:10]
     })
 
-@app.route('/api/player/<name>', methods=['GET'])
+@app.route('/api/player/<n>', methods=['GET'])
 def get_player_details(name):
     """Gibt detaillierte Spieler-Info"""
     player = players_data.get(name)
@@ -376,6 +377,80 @@ def get_prediction_stats():
             }
         })
 
+@app.route('/api/check-predictions', methods=['POST'])
+def trigger_check_predictions():
+    """
+    🔍 MANUELLER PREDICTION CHECK
+    Checkt alle ausstehenden Vorhersagen gegen echte NBA Ergebnisse
+    """
+    print("\n" + "="*60)
+    print("🔍 MANUELLER PREDICTION CHECK GESTARTET")
+    print("="*60 + "\n")
+    
+    try:
+        from nba_prediction_tracker import PredictionTracker
+        
+        # Initialize tracker
+        tracker = PredictionTracker()
+        tracker.load_data()
+        
+        print(f"📊 Lade Vorhersagen...")
+        print(f"   Gesamt: {len(tracker.predictions)}")
+        
+        unchecked = [p for p in tracker.predictions if not p['checked']]
+        print(f"   Unchecked: {len(unchecked)}")
+        
+        if len(unchecked) == 0:
+            print("ℹ️ Keine ausstehenden Vorhersagen zum Checken")
+            return jsonify({
+                'success': True,
+                'message': 'Keine ausstehenden Vorhersagen',
+                'checked': 0,
+                'correct': 0,
+                'stats': tracker.stats
+            })
+        
+        # Check predictions against real results
+        print("\n🔍 Starte Checking...")
+        tracker.check_predictions()
+        
+        # Update stats
+        print("📊 Aktualisiere Statistiken...")
+        tracker.update_stats()
+        
+        # Get results
+        newly_checked = [p for p in tracker.predictions if p['checked']]
+        correct = sum(1 for p in newly_checked if p['was_correct'])
+        
+        print("\n" + "="*60)
+        print("✅ CHECK ABGESCHLOSSEN!")
+        print(f"   Gecheckt: {len(newly_checked)}")
+        print(f"   Korrekt: {correct}")
+        print(f"   Accuracy: {tracker.stats.get('accuracy', 0)}%")
+        print("="*60 + "\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Predictions erfolgreich gecheckt',
+            'checked': len(newly_checked),
+            'correct': correct,
+            'accuracy': tracker.stats.get('accuracy', 0),
+            'stats': tracker.stats
+        })
+        
+    except Exception as e:
+        print("\n" + "="*60)
+        print("❌ FEHLER BEIM CHECKEN!")
+        print(f"Error: {e}")
+        print("="*60 + "\n")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health Check für Deployment"""
@@ -398,12 +473,13 @@ if __name__ == '__main__':
     print("  GET  /")
     print("  GET  /api/players")
     print("  GET  /api/players/search?q=LeBron")
-    print("  GET  /api/player/<name>")
+    print("  GET  /api/player/<n>")
     print("  POST /api/predict")
     print("  GET  /api/teams")
     print("  GET  /api/today-games")
     print("  GET  /api/predictions-history")
     print("  GET  /api/prediction-stats")
+    print("  POST /api/check-predictions  ← NEU!")
     print("  GET  /api/health")
     print("\n" + "="*60 + "\n")
     
