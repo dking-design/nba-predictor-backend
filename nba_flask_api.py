@@ -318,21 +318,6 @@ def get_today_games():
         loader = NBAGamesLoader()
         games = loader.get_today_and_tomorrow_games()
         
-        if not games:
-            # Fallback Mock-Daten
-            games = [
-                {
-                    'game_id': '0022400001',
-                    'date': '2024-10-22',
-                    'time': '7:30 PM ET',
-                    'team1_abbr': 'LAL',
-                    'team2_abbr': 'GSW',
-                    'team1_name': 'Lakers',
-                    'team2_name': 'Warriors',
-                    'matchup': 'LAL vs GSW'
-                }
-            ]
-        
         return jsonify({
             'success': True,
             'count': len(games),
@@ -340,10 +325,14 @@ def get_today_games():
         })
         
     except Exception as e:
-        print(f"Error loading games: {e}")
-        # Fallback
+        print(f"❌ Error loading games: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return empty statt Mock
         return jsonify({
-            'success': True,
+            'success': False,
+            'error': str(e),
             'count': 0,
             'games': []
         })
