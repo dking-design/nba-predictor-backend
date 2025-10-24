@@ -39,18 +39,26 @@ class PredictionTracker:
                     'correct_predictions': 0,
                     'accuracy': 0.0
                 }, f)
-                
-        @property
-def stats(self):
-    """Read and return stats from file"""
-    import json
     
-    try:
-        if os.path.exists(self.stats_file):
-            with open(self.stats_file, 'r') as f:
-                return json.load(f)
-        else:
-            # Return default stats
+    @property
+    def stats(self):
+        """Read and return stats from file"""
+        try:
+            if os.path.exists(self.stats_file):
+                with open(self.stats_file, 'r') as f:
+                    return json.load(f)
+            else:
+                # Return default stats
+                return {
+                    'total_predictions': 0,
+                    'correct_predictions': 0,
+                    'accuracy': 0.0,
+                    'last_7_days': [],
+                    'best_day': None,
+                    'worst_day': None
+                }
+        except Exception as e:
+            print(f"Error reading stats: {e}")
             return {
                 'total_predictions': 0,
                 'correct_predictions': 0,
@@ -59,16 +67,18 @@ def stats(self):
                 'best_day': None,
                 'worst_day': None
             }
-    except Exception as e:
-        print(f"Error reading stats: {e}")
-        return {
-            'total_predictions': 0,
-            'correct_predictions': 0,
-            'accuracy': 0.0,
-            'last_7_days': [],
-            'best_day': None,
-            'worst_day': None
-        }
+    
+    def get_all_predictions(self):
+        """Gibt alle Vorhersagen zurück"""
+        try:
+            if os.path.exists(self.predictions_file):
+                with open(self.predictions_file, 'r') as f:
+                    return json.load(f)
+            else:
+                return []
+        except Exception as e:
+            print(f"Error reading predictions: {e}")
+            return []
     
     def load_data(self):
         """Lädt gespeicherte Daten"""
@@ -82,9 +92,9 @@ def stats(self):
         # Stats
         if os.path.exists(self.stats_file):
             with open(self.stats_file, 'r') as f:
-                self.stats = json.load(f)
+                self._stats = json.load(f)
         else:
-            self.stats = {
+            self._stats = {
                 'total_predictions': 0,
                 'correct_predictions': 0,
                 'accuracy': 0.0,
@@ -100,10 +110,11 @@ def stats(self):
             json.dump(self.predictions, f, indent=2)
         
         with open(self.stats_file, 'w') as f:
-            json.dump(self.stats, f, indent=2)
+            json.dump(self._stats, f, indent=2)
     
     def log_prediction(self, team1, team2, predicted_winner, 
-                      predicted_score, confidence, game_date=None):
+                      predicted_score, confidence, game_date=None, 
+                      team1_name=None, team2_name=None):
         """Speichert eine neue Vorhersage"""
         if game_date is None:
             game_date = datetime.now().strftime('%Y-%m-%d')
@@ -113,6 +124,8 @@ def stats(self):
             'date': game_date,
             'team1': team1,
             'team2': team2,
+            'team1_name': team1_name or team1,
+            'team2_name': team2_name or team2,
             'predicted_winner': predicted_winner,
             'predicted_score': predicted_score,
             'confidence': confidence,
@@ -122,9 +135,15 @@ def stats(self):
             'checked': False
         }
         
-        self.predictions.append(prediction)
-        self.save_data()
-        print(f"✓ Vorhersage gespeichert: {team1} vs {team2}")
+        # Load existing predictions
+        predictions = self.get_all_predictions()
+        predictions.append(prediction)
+        
+        # Save
+        with open(self.predictions_file, 'w') as f:
+            json.dump(predictions, f, indent=2)
+        
+        print(f"✅ Vorhersage gespeichert: {team1} vs {team2}")
         return prediction
     
     def get_yesterdays_results(self):
@@ -162,7 +181,7 @@ def stats(self):
                         'winner': winner
                     })
             
-            print(f"✓ {len(results)} Spiele gefunden")
+            print(f"✅ {len(results)} Spiele gefunden")
             return results
             
         except Exception as e:
@@ -177,6 +196,7 @@ def stats(self):
             print("ℹ️ Keine Ergebnisse zum Checken")
             return
         
+        self.load_data()
         checked_count = 0
         correct_count = 0
         
@@ -227,9 +247,9 @@ def stats(self):
         correct = sum(1 for p in checked if p['was_correct'])
         accuracy = (correct / total * 100) if total > 0 else 0
         
-        self.stats['total_predictions'] = total
-        self.stats['correct_predictions'] = correct
-        self.stats['accuracy'] = round(accuracy, 2)
+        self._stats['total_predictions'] = total
+        self._stats['correct_predictions'] = correct
+        self._stats['accuracy'] = round(accuracy, 2)
         
         # Last 7 days
         last_7_days = {}
@@ -242,7 +262,7 @@ def stats(self):
             if p['was_correct']:
                 last_7_days[date]['correct'] += 1
         
-        self.stats['last_7_days'] = [
+        self._stats['last_7_days'] = [
             {
                 'date': date,
                 'accuracy': round(data['correct'] / data['total'] * 100, 1),
@@ -253,13 +273,13 @@ def stats(self):
         ]
         
         # Best/Worst day
-        if self.stats['last_7_days']:
-            self.stats['best_day'] = max(
-                self.stats['last_7_days'], 
+        if self._stats['last_7_days']:
+            self._stats['best_day'] = max(
+                self._stats['last_7_days'], 
                 key=lambda x: x['accuracy']
             )
-            self.stats['worst_day'] = min(
-                self.stats['last_7_days'], 
+            self._stats['worst_day'] = min(
+                self._stats['last_7_days'], 
                 key=lambda x: x['accuracy']
             )
         
@@ -267,29 +287,31 @@ def stats(self):
     
     def show_stats(self):
         """Zeigt Statistiken"""
+        self.load_data()
+        
         print("\n" + "="*60)
         print("📊 PREDICTION TRACKER - STATISTIKEN")
         print("="*60)
         
         print(f"\n🎯 Gesamt-Accuracy:")
-        print(f"   {self.stats['accuracy']}% "
-              f"({self.stats['correct_predictions']}/{self.stats['total_predictions']})")
+        print(f"   {self._stats['accuracy']}% "
+              f"({self._stats['correct_predictions']}/{self._stats['total_predictions']})")
         
-        if self.stats['last_7_days']:
+        if self._stats['last_7_days']:
             print(f"\n📅 Letzte 7 Tage:")
-            for day in self.stats['last_7_days']:
+            for day in self._stats['last_7_days']:
                 print(f"   {day['date']}: {day['accuracy']}% "
                       f"({day['correct']}/{day['total']})")
         
-        if self.stats['best_day']:
+        if self._stats['best_day']:
             print(f"\n🏆 Bester Tag:")
-            print(f"   {self.stats['best_day']['date']}: "
-                  f"{self.stats['best_day']['accuracy']}%")
+            print(f"   {self._stats['best_day']['date']}: "
+                  f"{self._stats['best_day']['accuracy']}%")
         
-        if self.stats['worst_day']:
+        if self._stats['worst_day']:
             print(f"\n📉 Schlechtester Tag:")
-            print(f"   {self.stats['worst_day']['date']}: "
-                  f"{self.stats['worst_day']['accuracy']}%")
+            print(f"   {self._stats['worst_day']['date']}: "
+                  f"{self._stats['worst_day']['accuracy']}%")
         
         print("\n" + "="*60)
 
