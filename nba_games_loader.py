@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-NBA Games Loader - FIXED VERSION
-Nutzt Game Header für morgige Spiele (Line Score ist leer für zukünftige Spiele)
+NBA Games Loader - ROBUST VERSION
+Lädt heutige Spiele, morgen nur als Fallback mit Error Handling
 """
 
 from nba_api.live.nba.endpoints import scoreboard
-from nba_api.stats.endpoints import ScoreboardV2
 from datetime import datetime, timedelta
 import time
 
 class NBAGamesLoader:
-    """Lädt heutige UND morgige NBA Spiele"""
+    """Lädt heutige NBA Spiele (morgen nur als Safe Fallback)"""
     
     def __init__(self):
         self.games = []
@@ -67,23 +66,25 @@ class NBAGamesLoader:
                     })
                     
                 except Exception as e:
-                    print(f"⚠️ Fehler beim Parsen: {e}")
+                    print(f"⚠️ Fehler beim Parsen eines Spiels: {e}")
                     continue
             
             print(f"✅ Heute: {len(parsed_games)} Spiele")
             return parsed_games
             
         except Exception as e:
-            print(f"❌ Fehler heute: {e}")
+            print(f"❌ Fehler beim Laden heutiger Spiele: {e}")
             return []
     
-    def get_tomorrows_games(self):
+    def get_tomorrows_games_safe(self):
         """
-        Holt morgige NBA Spiele
-        WICHTIG: Nutzt Game Header, nicht Line Score!
+        Versucht morgige Spiele zu laden (mit Safe Error Handling)
+        Falls es nicht funktioniert, einfach leere Liste zurück
         """
         try:
-            print("📡 Lade morgige NBA Spiele...")
+            print("📡 Versuche morgige NBA Spiele zu laden...")
+            
+            from nba_api.stats.endpoints import ScoreboardV2
             
             tomorrow = (datetime.now() + timedelta(days=1)).strftime('%m/%d/%Y')
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
@@ -94,13 +95,14 @@ class NBAGamesLoader:
             games_df = board.game_header.get_data_frame()
             
             if len(games_df) == 0:
-                print("⚠️ Keine Spiele morgen")
+                print("⚠️ Keine Spiele morgen in API")
                 return []
             
-            # WICHTIG: Hole auch SeriesStandings für Team-Kürzel!
+            # Versuche Series Standings
             try:
                 series_df = board.series_standings.get_data_frame()
             except:
+                print("⚠️ Series Standings nicht verfügbar")
                 series_df = None
             
             parsed_games = []
@@ -112,22 +114,24 @@ class NBAGamesLoader:
                     visitor_team_id = game['VISITOR_TEAM_ID']
                     game_time = game.get('GAME_STATUS_TEXT', 'TBD')
                     
-                    # Methode 1: Aus SeriesStandings holen
                     away_abbr = None
                     home_abbr = None
                     
+                    # Methode 1: Series Standings
                     if series_df is not None and len(series_df) > 0:
-                        # Finde Teams by ID
-                        home_team_row = series_df[series_df['TEAM_ID'] == home_team_id]
-                        visitor_team_row = series_df[series_df['TEAM_ID'] == visitor_team_id]
-                        
-                        if not home_team_row.empty:
-                            home_abbr = home_team_row.iloc[0].get('TEAM_ABBREVIATION', '')
-                        
-                        if not visitor_team_row.empty:
-                            away_abbr = visitor_team_row.iloc[0].get('TEAM_ABBREVIATION', '')
+                        try:
+                            home_team_row = series_df[series_df['TEAM_ID'] == home_team_id]
+                            visitor_team_row = series_df[series_df['TEAM_ID'] == visitor_team_id]
+                            
+                            if not home_team_row.empty:
+                                home_abbr = home_team_row.iloc[0].get('TEAM_ABBREVIATION', '')
+                            
+                            if not visitor_team_row.empty:
+                                away_abbr = visitor_team_row.iloc[0].get('TEAM_ABBREVIATION', '')
+                        except:
+                            pass
                     
-                    # Methode 2: Fallback zu Matchup String
+                    # Methode 2: Matchup String
                     if not away_abbr or not home_abbr:
                         matchup = game.get('MATCHUP', '').strip()
                         
@@ -144,12 +148,12 @@ class NBAGamesLoader:
                             home_abbr = parts[0].strip()
                             away_abbr = parts[1].strip()
                     
-                    # Wenn immer noch nicht gefunden
+                    # Wenn immer noch nicht gefunden - skip
                     if not away_abbr or not home_abbr:
-                        print(f"⚠️ Kann Teams nicht finden für Game ID: {game_id}")
+                        print(f"⚠️ Kann Teams nicht finden für Game: {game_id}")
                         continue
                     
-                    # Team Namen approximieren (besser als nichts)
+                    # Team Namen
                     team_name_map = {
                         'LAL': 'Lakers', 'GSW': 'Warriors', 'BOS': 'Celtics',
                         'MIA': 'Heat', 'PHX': 'Suns', 'LAC': 'Clippers',
@@ -179,48 +183,54 @@ class NBAGamesLoader:
                     })
                     
                 except Exception as e:
-                    print(f"⚠️ Fehler Spiel: {e}")
+                    print(f"⚠️ Fehler bei morgen Spiel: {e}")
                     continue
             
             print(f"✅ Morgen: {len(parsed_games)} Spiele")
             return parsed_games
             
         except Exception as e:
-            print(f"❌ Fehler morgen: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Fehler beim Laden morgiger Spiele: {e}")
+            print("⚠️ Fahre nur mit heutigen Spielen fort")
             return []
     
     def get_games_with_fallback(self):
-        """Holt IMMER heute + morgen"""
+        """
+        Holt Spiele mit robustem Fallback:
+        1. Heute (Live API)
+        2. Falls leer: Versuche morgen (mit Error Handling)
+        3. Falls beide leer: Mock
+        """
         all_games = []
         
         print("\n" + "="*60)
-        print("🏀 LADE SPIELE (HEUTE + MORGEN)")
+        print("🏀 LADE SPIELE")
         print("="*60)
         
+        # Heute
         today_games = self.get_todays_games()
         all_games.extend(today_games)
         
-        tomorrow_games = self.get_tomorrows_games()
-        all_games.extend(tomorrow_games)
+        # Morgen nur wenn heute leer
+        if len(today_games) == 0:
+            print("⚠️ Keine Spiele heute, versuche morgen...")
+            tomorrow_games = self.get_tomorrows_games_safe()
+            all_games.extend(tomorrow_games)
         
         print("\n" + "="*60)
         print(f"📊 GESAMT: {len(all_games)} Spiele")
-        print(f"   Heute: {len(today_games)}")
-        print(f"   Morgen: {len(tomorrow_games)}")
         print("="*60 + "\n")
         
+        # Mock nur wenn GAR NICHTS
         if len(all_games) == 0:
-            print("⚠️ Keine Spiele - verwende Mock-Daten")
+            print("⚠️ Keine Spiele gefunden - verwende Mock-Daten")
             all_games = self._get_mock_games()
         
         return all_games
     
     def _get_mock_games(self):
-        """Mock-Daten"""
+        """Mock-Daten als letzter Fallback"""
         today = datetime.now().strftime('%Y-%m-%d')
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
         
         return [
             {
@@ -232,18 +242,18 @@ class NBAGamesLoader:
                 'team1_name': 'Lakers',
                 'team2_name': 'Warriors',
                 'matchup': 'LAL vs GSW',
-                'status': 'Mock (Today)'
+                'status': 'Mock Game'
             },
             {
                 'game_id': 'mock_002',
-                'date': tomorrow,
+                'date': today,
                 'time': '8:00 PM ET',
                 'team1_abbr': 'BOS',
                 'team2_abbr': 'MIA',
                 'team1_name': 'Celtics',
                 'team2_name': 'Heat',
                 'matchup': 'BOS vs MIA',
-                'status': 'Mock (Tomorrow)'
+                'status': 'Mock Game'
             }
         ]
 
@@ -255,20 +265,7 @@ if __name__ == "__main__":
     print("\n🏀 FINALE SPIELE:")
     print("="*60)
     
-    today = datetime.now().strftime('%Y-%m-%d')
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-    
-    today_games = [g for g in games if g['date'] == today]
-    tomorrow_games = [g for g in games if g['date'] == tomorrow]
-    
-    if today_games:
-        print(f"\n📅 HEUTE ({today}):")
-        for game in today_games:
-            print(f"   {game['matchup']} - {game['time']}")
-    
-    if tomorrow_games:
-        print(f"\n📅 MORGEN ({tomorrow}):")
-        for game in tomorrow_games:
-            print(f"   {game['matchup']} - {game['time']}")
+    for game in games:
+        print(f"{game['date']} | {game['matchup']} - {game['time']}")
     
     print(f"\n✅ GESAMT: {len(games)} Spiele\n")
