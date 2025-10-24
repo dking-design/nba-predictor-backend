@@ -14,12 +14,31 @@ class PredictionTracker:
     """Trackt Vorhersagen und vergleicht mit Ergebnissen"""
     
     def __init__(self):
-	data_dir = '/data'
+        # Use persistent volume
+        data_dir = '/data'
+        
+        # Create directory if it doesn't exist
         if not os.path.exists(data_dir):
-            os.makedirs(data_dir, exist_ok=True)
-        self.predictions_file = 'predictions_history.json'
-        self.stats_file = 'prediction_stats.json'
-        self.load_data()
+            try:
+                os.makedirs(data_dir, exist_ok=True)
+            except:
+                data_dir = '.'  # Fallback
+        
+        self.predictions_file = os.path.join(data_dir, 'predictions_history.json')
+        self.stats_file = os.path.join(data_dir, 'prediction_stats.json')
+        
+        # Initialize empty files if they don't exist
+        if not os.path.exists(self.predictions_file):
+            with open(self.predictions_file, 'w') as f:
+                json.dump([], f)
+        
+        if not os.path.exists(self.stats_file):
+            with open(self.stats_file, 'w') as f:
+                json.dump({
+                    'total_predictions': 0,
+                    'correct_predictions': 0,
+                    'accuracy': 0.0
+                }, f)
     
     def load_data(self):
         """Lädt gespeicherte Daten"""
