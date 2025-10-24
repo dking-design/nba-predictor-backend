@@ -14,7 +14,7 @@ predictor = NBALineupPredictor()
 players_data = predictor.players
 
 class NumpyEncoder(json.JSONEncoder):
-    """JSON Encoder fÃ¼r NumPy types"""
+    """JSON Encoder für NumPy types"""
     def default(self, obj):
         if isinstance(obj, np.integer):
             return int(obj)
@@ -37,13 +37,14 @@ def home():
             '/api/players/search': 'GET - Spieler suchen',
             '/api/predict': 'POST - Vorhersage machen',
             '/api/prediction-stats': 'GET - Prediction Accuracy Stats',
-            '/api/today-games': 'GET - Heutige NBA-Spiele'
+            '/api/today-games': 'GET - Heutige NBA-Spiele',
+            '/api/predictions-history': 'GET - Alle Vorhersagen'
         }
     })
 
 @app.route('/api/players', methods=['GET'])
 def get_players():
-    """Gibt alle Spieler zurÃ¼ck"""
+    """Gibt alle Spieler zurück"""
     # Vereinfachte Player-Liste
     players_list = []
     
@@ -118,6 +119,10 @@ def get_player_details(name):
 @app.route('/api/predict', methods=['POST'])
 def make_prediction():
     """Macht eine Vorhersage"""
+    print("=" * 60)
+    print("🔵 PREDICTION REQUEST STARTED")
+    print("=" * 60)
+    
     data = request.get_json()
     
     # Validiere Input
@@ -140,7 +145,7 @@ def make_prediction():
             'error': 'Each lineup must have exactly 5 players'
         }), 400
     
-    # PrÃ¼fe ob alle Spieler existieren
+    # Prüfe ob alle Spieler existieren
     for player in team1_lineup + team2_lineup:
         if player not in players_data:
             return jsonify({
@@ -150,6 +155,7 @@ def make_prediction():
     
     try:
         # Mache Vorhersage
+        print("🔵 Making prediction...")
         result = predictor.predict_game(team1_lineup, team2_lineup, team1_home)
         
         if not result:
@@ -157,6 +163,8 @@ def make_prediction():
                 'success': False,
                 'error': 'Prediction failed'
             }), 500
+        
+        print(f"🔵 Prediction complete: {team1_name} {result['team1_score']} - {result['team2_score']} {team2_name}")
         
         # Berechne Synergien
         comparison = result['comparison']
@@ -181,16 +189,35 @@ def make_prediction():
                 'type': p_data['type']
             })
         
-        # NEU: Prediction-Tracking
+        # PREDICTION TRACKING
+        print("=" * 60)
+        print("🔵 STARTING PREDICTION TRACKING")
+        print("=" * 60)
+        
         try:
+            print("🔵 Step 1: Importing PredictionTracker...")
             from nba_prediction_tracker import PredictionTracker
+            print("✅ PredictionTracker imported successfully")
             
+            print("🔵 Step 2: Initializing tracker...")
             tracker = PredictionTracker()
+            print(f"✅ Tracker initialized")
+            print(f"📁 predictions_file: {tracker.predictions_file}")
             
-            # Extrahiere Team-KÃ¼rzel (falls vorhanden)
+            # Extrahiere Team-Kürzel (falls vorhanden)
             team1_abbr = data.get('team1_abbr', team1_name)
             team2_abbr = data.get('team2_abbr', team2_name)
             game_date = data.get('game_date', datetime.now().strftime('%Y-%m-%d'))
+            
+            print(f"🔵 Step 3: Preparing prediction data...")
+            print(f"   Team 1: {team1_abbr} ({team1_name})")
+            print(f"   Team 2: {team2_abbr} ({team2_name})")
+            print(f"   Date: {game_date}")
+            print(f"   Winner: {team1_name if result['winner'] == 1 else team2_name}")
+            print(f"   Score: {result['team1_score']}-{result['team2_score']}")
+            print(f"   Confidence: {result['confidence']}")
+            
+            print("🔵 Step 4: Calling log_prediction()...")
             
             # Log die Vorhersage
             tracker.log_prediction(
@@ -199,12 +226,25 @@ def make_prediction():
                 predicted_winner=team1_name if result['winner'] == 1 else team2_name,
                 predicted_score=f"{result['team1_score']}-{result['team2_score']}",
                 confidence=result['confidence'],
-                game_date=game_date
+                game_date=game_date,
+                team1_name=team1_name,
+                team2_name=team2_name
             )
-            print(f"âœ“ Prediction logged: {team1_abbr} vs {team2_abbr}")
+            
+            print("=" * 60)
+            print("✅ PREDICTION LOGGED SUCCESSFULLY!")
+            print(f"✅ Saved: {team1_abbr} vs {team2_abbr}")
+            print("=" * 60)
+            
         except Exception as e:
-            # Tracking-Fehler nicht kritisch
-            print(f"âš ï¸ Tracking failed: {e}")
+            print("=" * 60)
+            print("❌ TRACKING ERROR!")
+            print(f"❌ Error: {e}")
+            print("=" * 60)
+            import traceback
+            print("Full traceback:")
+            traceback.print_exc()
+            print("=" * 60)
         
         # Response
         return jsonify({
@@ -234,6 +274,9 @@ def make_prediction():
         })
     
     except Exception as e:
+        print(f"❌ PREDICTION ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -241,7 +284,7 @@ def make_prediction():
 
 @app.route('/api/teams', methods=['GET'])
 def get_teams():
-    """Gibt alle NBA Teams zurÃ¼ck"""
+    """Gibt alle NBA Teams zurück"""
     teams = {}
     
     for player_name, player_data in players_data.items():
@@ -268,78 +311,110 @@ def get_teams():
 
 @app.route('/api/today-games', methods=['GET'])
 def get_today_games():
-    """LÃ¤dt heutige und morgige NBA-Spiele (Mock-Daten fÃ¼r Test)"""
-    
-    # Mock-Daten fÃ¼r Testing
-    mock_games = [
-        {
-            'game_id': '0022400001',
-            'date': '2024-10-22',
-            'time': '7:30 PM ET',
-            'team1_abbr': 'LAL',
-            'team2_abbr': 'GSW',
-            'team1_name': 'Lakers',
-            'team2_name': 'Warriors',
-            'matchup': 'LAL vs GSW'
-        },
-        {
-            'game_id': '0022400002',
-            'date': '2024-10-22',
-            'time': '8:00 PM ET',
-            'team1_abbr': 'BOS',
-            'team2_abbr': 'MIA',
-            'team1_name': 'Celtics',
-            'team2_name': 'Heat',
-            'matchup': 'BOS vs MIA'
-        },
-        {
-            'game_id': '0022400003',
-            'date': '2024-10-23',
-            'time': '7:00 PM ET',
-            'team1_abbr': 'PHX',
-            'team2_abbr': 'LAC',
-            'team1_name': 'Suns',
-            'team2_name': 'Clippers',
-            'matchup': 'PHX vs LAC'
-        },
-        {
-            'game_id': '0022400004',
-            'date': '2024-10-23',
-            'time': '8:30 PM ET',
-            'team1_abbr': 'DAL',
-            'team2_abbr': 'DEN',
-            'team1_name': 'Mavericks',
-            'team2_name': 'Nuggets',
-            'matchup': 'DAL vs DEN'
-        }
-    ]
-    
-    return jsonify({
-        'success': True,
-        'count': len(mock_games),
-        'games': mock_games
-    })
-@app.route('/api/prediction-stats', methods=['GET'])
-def get_prediction_stats():
-    """Gibt Prediction-Tracking Statistiken zurÃ¼ck"""
+    """Lädt heutige und morgige NBA-Spiele"""
+    try:
+        from nba_games_loader import NBAGamesLoader
+        
+        loader = NBAGamesLoader()
+        games = loader.get_today_and_tomorrow_games()
+        
+        if not games:
+            # Fallback Mock-Daten
+            games = [
+                {
+                    'game_id': '0022400001',
+                    'date': '2024-10-22',
+                    'time': '7:30 PM ET',
+                    'team1_abbr': 'LAL',
+                    'team2_abbr': 'GSW',
+                    'team1_name': 'Lakers',
+                    'team2_name': 'Warriors',
+                    'matchup': 'LAL vs GSW'
+                }
+            ]
+        
+        return jsonify({
+            'success': True,
+            'count': len(games),
+            'games': games
+        })
+        
+    except Exception as e:
+        print(f"Error loading games: {e}")
+        # Fallback
+        return jsonify({
+            'success': True,
+            'count': 0,
+            'games': []
+        })
+
+@app.route('/api/predictions-history', methods=['GET'])
+def get_predictions_history():
+    """Gibt alle Vorhersagen zurück"""
     try:
         from nba_prediction_tracker import PredictionTracker
         
         tracker = PredictionTracker()
+        predictions = tracker.get_all_predictions()
         
         return jsonify({
             'success': True,
-            'stats': tracker.stats
+            'count': len(predictions),
+            'predictions': predictions
         })
     except Exception as e:
+        print(f"Error getting predictions history: {e}")
         return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+            'success': True,
+            'count': 0,
+            'predictions': []
+        })
+
+@app.route('/api/prediction-stats', methods=['GET'])
+def get_prediction_stats():
+    """Gibt Prediction-Tracking Statistiken zurück"""
+    try:
+        from nba_prediction_tracker import PredictionTracker
+        import os
+        
+        tracker = PredictionTracker()
+        
+        # Initialize stats if file doesn't exist
+        if not os.path.exists(tracker.stats_file):
+            stats = {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0.0,
+                'last_7_days': [],
+                'best_day': None,
+                'worst_day': None
+            }
+        else:
+            stats = tracker.stats
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    
+    except Exception as e:
+        print(f"Error in prediction-stats: {e}")
+        # Return empty stats instead of crashing
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0.0,
+                'last_7_days': [],
+                'best_day': None,
+                'worst_day': None
+            }
+        })
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health Check fÃ¼r Deployment"""
+    """Health Check für Deployment"""
     return jsonify({
         'status': 'healthy',
         'players_loaded': len(players_data)
@@ -348,9 +423,9 @@ def health_check():
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("ðŸ€ NBA PREDICTOR API")
+    print("🏀 NBA PREDICTOR API")
     print("="*60)
-    print(f"\nAPI lÃ¤uft auf: http://localhost:5001")
+    print(f"\nAPI läuft auf: http://localhost:5001")
     print(f"Spieler geladen: {len(players_data)}")
     print("\nEndpoints:")
     print("  GET  /api/players")
@@ -358,7 +433,8 @@ if __name__ == '__main__':
     print("  GET  /api/player/<name>")
     print("  POST /api/predict")
     print("  GET  /api/teams")
-    print("  GET  /api/today-games  â† NEU!")
+    print("  GET  /api/today-games")
+    print("  GET  /api/predictions-history")
     print("  GET  /api/prediction-stats")
     print("\n" + "="*60 + "\n")
     
