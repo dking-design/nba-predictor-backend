@@ -39,6 +39,36 @@ class PredictionTracker:
                     'correct_predictions': 0,
                     'accuracy': 0.0
                 }, f)
+                
+        @property
+def stats(self):
+    """Read and return stats from file"""
+    import json
+    
+    try:
+        if os.path.exists(self.stats_file):
+            with open(self.stats_file, 'r') as f:
+                return json.load(f)
+        else:
+            # Return default stats
+            return {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0.0,
+                'last_7_days': [],
+                'best_day': None,
+                'worst_day': None
+            }
+    except Exception as e:
+        print(f"Error reading stats: {e}")
+        return {
+            'total_predictions': 0,
+            'correct_predictions': 0,
+            'accuracy': 0.0,
+            'last_7_days': [],
+            'best_day': None,
+            'worst_day': None
+        }
     
     def load_data(self):
         """Lädt gespeicherte Daten"""
