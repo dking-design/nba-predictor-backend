@@ -317,21 +317,44 @@ def get_today_games():
 
 @app.route('/api/prediction-stats', methods=['GET'])
 def get_prediction_stats():
-    """Gibt Prediction-Tracking Statistiken zurück"""
     try:
         from nba_prediction_tracker import PredictionTracker
+        import os
         
         tracker = PredictionTracker()
         
+        # Initialize stats if file doesn't exist
+        if not os.path.exists(tracker.stats_file):
+            stats = {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0.0,
+                'last_7_days': [],
+                'best_day': None,
+                'worst_day': None
+            }
+        else:
+            stats = tracker.stats
+        
         return jsonify({
             'success': True,
-            'stats': tracker.stats
+            'stats': stats
         })
+    
     except Exception as e:
+        print(f"Error in prediction-stats: {e}")
+        # Return empty stats instead of crashing
         return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+            'success': True,
+            'stats': {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0.0,
+                'last_7_days': [],
+                'best_day': None,
+                'worst_day': None
+            }
+        })
         
 @app.route('/api/predictions-history', methods=['GET'])
 def get_predictions_history():
