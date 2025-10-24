@@ -2,9 +2,7 @@ name: Check Predictions Daily
 
 on:
   schedule:
-    # Jeden Tag um 10 Uhr morgens (nach den Spielen der Nacht)
     - cron: '0 10 * * *'
-  
   workflow_dispatch:
 
 jobs:
@@ -22,31 +20,15 @@ jobs:
       
       - name: Install Dependencies
         run: |
-          pip install nba-api
+          pip install requests nba-api pandas numpy joblib scikit-learn
       
       - name: Check Yesterday's Predictions
+        env:
+          RAILWAY_API_URL: ${{ secrets.RAILWAY_API_URL }}
         run: |
-          python live_prediction_checker.py check
+          python live_prediction_checker.py
       
-      - name: Show Stats
-        run: |
-          python live_prediction_checker.py stats
-      
-      - name: Commit Updated Stats
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          if ! git diff --quiet predictions_history.json prediction_stats.json; then
-            git add predictions_history.json prediction_stats.json
-            git commit -m "📊 Auto-update: Prediction stats $(date +'%Y-%m-%d')"
-            git push
-            echo "✅ Stats updated and pushed!"
-          else
-            echo "ℹ️ No changes to commit"
-          fi
-      
-      - name: Trigger Railway Deploy
+      - name: Success Notification
         if: success()
         run: |
-          echo "✅ Stats updated! Railway will auto-deploy."
+          echo "✅ Predictions checked successfully!"
